@@ -536,12 +536,24 @@ var RR = (function () {
   /* Overlaps at the current pose. `fresh` lists the other parts this pose
      newly runs into (a block); `boom` is a bomb whose circle newly touches
      something (a detonation, not a block). */
+  /* ⚠ The pairs are listed when the drag starts, but a clip can let go - and a
+     piece can leave the board - in the middle of it. Whether a part still stops
+     anything is asked at the moment of contact: the owner turned level 5's
+     orange ring out of the green clip and on round, and its other end "hit" that
+     same clip, now let go - in one drag only; lift the finger and it passed. */
+  function passable(game, gr) {
+    if (gr.owner.removed) return true;
+    var rs = game.opts.releasedSolid;
+    if (rs === false) return deadHead(gr);
+    if (rs === "walls") return gr.kind === "trig" && deadHead(gr);
+    return false;
+  }
   Drag.prototype.check = function () {
-    var pr = this.pairs, allowed = this.allowed, now = new Set(), fresh = null, boom = null;
+    var pr = this.pairs, allowed = this.allowed, now = new Set(), fresh = null, boom = null, g = this.g;
     for (var i = 0; i < pr.length; i += 2)
       if (groupHit(pr[i], pr[i + 1])) {
         var k = pairKey(pr[i], pr[i + 1]);
-        if (!allowed.has(k)) {
+        if (!allowed.has(k) && !passable(g, pr[i]) && !passable(g, pr[i + 1])) {
           if (pr[i].kind === "bomb") boom = boom || pr[i];
           else if (pr[i + 1].kind === "bomb") boom = boom || pr[i + 1];
           else (fresh = fresh || []).push(pr[i + 1]);
