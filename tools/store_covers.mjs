@@ -34,7 +34,11 @@ async function shoot(shape) {
     `--window-size=${shape.w},${shape.h}`, "about:blank"], { stdio: "ignore" });
   try {
     let targets = null;
-    for (let i = 0; i < 60 && !targets; i++) { try { targets = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); } catch { await sleep(150); } }
+    // ⚠ until its page is listed: right after start the list can come back without it
+    for (let i = 0; i < 80 && !targets; i++) {
+      try { const l = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); if (l.some(t => t.type === "page")) targets = l; } catch { /* not up yet */ }
+      if (!targets) await sleep(150);
+    }
     const ws = new WebSocket(targets.find(t => t.type === "page").webSocketDebuggerUrl);
     await new Promise(r => ws.addEventListener("open", r));
     let id = 0; const wait = new Map();
