@@ -1,0 +1,23 @@
+# Build output. `cd src && python build.py [crazy]` makes dist/ from src/ in a
+# second; GitHub Pages builds it again in CI (.github/workflows/pages.yml), so a
+# copy in history would only grow the repo on every commit.
+/dist/
+# the CrazyGames bundle zipped for upload (tools/release.py)
+/release/
+
+# Reference material and raw renders: not for the repo
+/Manythings/
+
+# Working notes stay on the PC (the owner, 2026-10-17): the public README is
+# .github/README.md. ⚠ No CLAUDE.md of any kind, in any folder.
+/README.md
+CLAUDE.md
+CLAUDE.local.md
+
+# Throwaway evidence: screenshots and measurements from the tools
+/tools/.shots/
+/tools/.measure/
+
+# Python
+__pycache__/
+*.py[cod]

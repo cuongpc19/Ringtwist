@@ -1,0 +1,56 @@
+# Ring Twist on GitHub Pages: every push to main builds the web game from src/
+# and publishes it - https://cuongpc19.github.io/Ringtwist/
+#
+# The same build as on the PC (`cd src && python build.py`, no host SDK), then
+# every shipped level replayed out of the built bundle before anything goes up:
+# a board the build broke never reaches the page.
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# pushes in a row: only the last one deploys
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the web game into dist/
+        run: cd src && python build.py
+
+      - name: Play every shipped level out of the build
+        run: node tools/verify_build.js > verify.txt || (cat verify.txt; exit 1); tail -2 verify.txt
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

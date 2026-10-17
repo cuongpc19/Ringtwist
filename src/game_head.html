@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Ring Twist</title>
+<!-- "Add to Home Screen": full screen, no browser bars, our own icon -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Ring Twist">
+<meta name="theme-color" content="#f6ead6">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+@font-face{font-family:'Lilita One';font-style:normal;font-weight:400;font-display:swap;src:url(fonts/LilitaOne-latin-3.woff2) format('woff2')}
+@font-face{font-family:'Nunito';font-style:normal;font-weight:400 900;font-display:swap;src:url(fonts/Nunito-latin-5.woff2) format('woff2')}
+/* ---------------- the look: Seat Jam's glossy toy stuff ----------------
+   The board is a 3D tray (render3d.js); the HUD is made of the same toy: a
+   ramp on every face, a hard gloss over its top half, a slab edge under it, a
+   white rim, and the type stroked in the slab's own dark. Taken from
+   seatawayO/src/game3d.css, where each step was picked off renders.
+   ⚠ The gloss is a background layer (--gloss first), never ::before - the
+   badges already sit in the buttons' corners.                               */
+:root{
+  --ground:#f6ead6;                                  /* render3d.js sets it per theme - always a light tint */
+  --ink:#24305e; --ink2:#55618c; --paper:#fbfaff;
+  --gloss:linear-gradient(180deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 47%);
+  --purple:linear-gradient(180deg,#a98cff 0%,#7a55d9 60%,#6646c2 100%); --purple-e:#46299a; --purple-i:#3a2380;
+  --blue:linear-gradient(180deg,#7fa8f5 0%,#4a7ad0 60%,#3d6cc0 100%);   --blue-e:#2a4d94;   --blue-i:#23407e;
+  --red:linear-gradient(180deg,#f58a86 0%,#e6433f 60%,#cc3733 100%);    --red-e:#962a27;    --red-i:#7c1f1c;
+  --green:linear-gradient(180deg,#8fe870 0%,#4cbf35 60%,#3aa628 100%);  --green-e:#2a7d1c;  --green-i:#1f5e14;
+  --orange:linear-gradient(180deg,#ffd76b 0%,#ffab3a 60%,#f2902a 100%); --orange-e:#b5621a; --orange-i:#7a3d08;
+  --sky:linear-gradient(180deg,#9be6ff 0%,#46b8f0 60%,#2c9bd9 100%);    --sky-e:#1c6ea3;
+  --white:linear-gradient(180deg,#ffffff 0%,#f3f2ed 60%,#e3e1d8 100%);  --white-e:#b9b6aa;
+  --grey:linear-gradient(180deg,#c9ccd3 0%,#9ca1ab 60%,#8a8f99 100%);   --grey-e:#5f646d;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--ground);touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  font-family:'Nunito',system-ui,sans-serif;color:var(--ink)}
+canvas{position:absolute;left:0;top:0;width:100%;height:100%;outline:none;display:block}
+#boot{position:fixed;inset:0;background:var(--ground);z-index:50;display:flex;align-items:center;justify-content:center;transition:opacity .3s}
+#boot.gone{opacity:0;pointer-events:none}
+#boot .dots{display:flex;gap:10px}
+#boot .dots i{width:18px;height:18px;border-radius:50%;border:5px solid #ffab3a;box-shadow:0 3px 0 rgba(36,48,94,.25);animation:bob 1s infinite ease-in-out}
+#boot .dots i:nth-child(2){border-color:#fff;animation-delay:.15s}
+#boot .dots i:nth-child(3){border-color:#7a55d9;animation-delay:.3s}
+@keyframes bob{50%{transform:translateY(-8px)}}
+
+/* ⚠ UI_UX_RULES 2.8: the HUD layer covers the board; it must not eat touches */
+#app{position:fixed;inset:0;pointer-events:none;z-index:5}
+#app button,#app input,#app .card,#app .sheet{pointer-events:auto}
+[hidden]{display:none!important}
+button{font-family:inherit;border:0;cursor:pointer;color:inherit;background:none;padding:0}
+.font{font-family:'Lilita One','Nunito',sans-serif;font-weight:400;letter-spacing:.3px}
+/* stroked type: the stroke is drawn first, so only its outer half shows */
+.st{color:#fff;-webkit-text-stroke:4px var(--sti,var(--ink));paint-order:stroke fill;text-shadow:0 2px 0 var(--sti,var(--ink))}
+
+/* ---------- the toy pieces every button is made of ---------- */
+.toy{border:2.5px solid rgba(255,255,255,.95);color:#fff;
+  background:var(--gloss),var(--face,var(--blue));
+  box-shadow:0 var(--lift,4px) 0 var(--edge,var(--blue-e)),0 calc(var(--lift,4px) + 5px) 12px rgba(20,24,60,.28),inset 0 -3px 0 rgba(0,0,0,.1)}
+.toy:active{transform:translateY(calc(var(--lift,4px) - 1px));box-shadow:0 1px 0 var(--edge,var(--blue-e)),inset 0 -3px 0 rgba(0,0,0,.1)}
+.toy:disabled{opacity:.4}
+.t-purple{--face:var(--purple);--edge:var(--purple-e);--sti:var(--purple-i)}
+.t-blue{--face:var(--blue);--edge:var(--blue-e);--sti:var(--blue-i)}
+.t-red{--face:var(--red);--edge:var(--red-e);--sti:var(--red-i)}
+.t-green{--face:var(--green);--edge:var(--green-e);--sti:var(--green-i)}
+.t-orange{--face:var(--orange);--edge:var(--orange-e);--sti:var(--orange-i)}
+.t-sky{--face:var(--sky);--edge:var(--sky-e);--sti:var(--blue-i)}
+.t-white{--face:var(--white);--edge:var(--white-e);color:var(--ink)}
+
+/* ---------- home ----------
+   The owner (2026-10-17), of a cover picture in Seat Jam's manner: "make Home
+   another kind - the rings turning in 3D like the game", "the buttons are too
+   big", the title "not so like Seat Jam". So Home is the game's own ground
+   with three of its rings turning on it, drawn live by render3d.js home() into
+   the two boxes below: #homeTitle (the letters, extruded in the rings' candy)
+   and #homeHero (the rings). The page only holds their places. Without WebGL
+   (html.flat) the two flat copies in them show instead.
+   The chrome follows UI_UX_RULES 1.1-1.7: one main button with the level on it,
+   the purse under it, the settings a small round button beside the purse. */
+#home{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  padding:calc(env(safe-area-inset-top) + 6vh) 16px calc(env(safe-area-inset-bottom) + 5vh)}
+html.flat #home{background:var(--ground)}
+#homeTitle{flex:none;width:min(84vw,400px,62vh)}
+#homeTitle .ttl{display:block;width:100%;height:auto}
+#homeHero{flex:1 1 0;min-height:140px;width:100%;display:flex;align-items:center;justify-content:center}
+#homeHero .heroFlat{display:block;width:min(82vw,380px);max-height:100%}
+/* in 3D the flat copies only hold the boxes */
+html:not(.flat) #homeTitle .ttl,html:not(.flat) #homeHero .heroFlat{visibility:hidden}
+#logo{display:none}
+#homeLow{flex:none;display:flex;flex-direction:column;align-items:center;gap:14px}
+/* The main button: a candy pill, the rings' gloss on it - no white rim, no
+   stroked type, a lip under it. ⚠ Smaller each time the owner looked: Seat
+   Jam's 257x74, then 210x62 ("too big" both). Now 176x54. */
+.playBtn{position:relative;display:flex;align-items:center;justify-content:center;gap:9px;min-width:176px;height:54px;padding:0 28px 3px 22px;border-radius:27px;
+  font:900 21px/1 'Nunito',system-ui,sans-serif;letter-spacing:.6px;color:#fff;text-shadow:0 2px 0 rgba(22,92,14,.45);
+  background:linear-gradient(180deg,#8ce866 0%,#54c63c 52%,#3aac2c 100%);
+  box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 5px 0 #2a8b22,0 10px 16px rgba(40,100,30,.28)}
+.playBtn:before{content:"";position:absolute;left:16px;right:16px;top:4px;height:16px;border-radius:9px;
+  background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.1));pointer-events:none}
+.playBtn svg{position:relative;width:19px;height:19px;flex:none;fill:#fff;filter:drop-shadow(0 2px 0 rgba(22,92,14,.45))}
+.playBtn span{position:relative}
+.playBtn b{font-weight:900}
+.playBtn small{font-size:inherit}
+.playBtn.hard,.card.done .btn.hard{background:var(--hard);text-shadow:0 2px 0 rgba(122,44,16,.5);box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 5px 0 var(--hard-e),0 10px 16px rgba(120,50,20,.3)}
+.playBtn.hard svg{filter:drop-shadow(0 2px 0 rgba(122,44,16,.5))}
+.playBtn.hard small{font-size:0}.playBtn.hard small:before{content:"HARD";font-size:21px}
+.playBtn.hard:active,.card.done .btn.hard:active{box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 2px 0 var(--hard-e),0 4px 8px rgba(120,50,20,.25)}
+.playBtn:active{transform:translateY(3px);box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 2px 0 #2a8b22,0 4px 8px rgba(40,100,30,.25)}
+.homeRow{display:flex;align-items:center;gap:10px}
+/* the purse and the settings: quiet, the same frosted pill */
+#home .wallet{display:flex;align-items:center;gap:7px;height:40px;padding:0 15px 0 7px;border-radius:20px;
+  font:900 18px/1 'Nunito',system-ui,sans-serif;color:var(--ink);background:rgba(255,255,255,.78);
+  box-shadow:0 3px 0 rgba(120,92,50,.16),0 5px 12px rgba(80,60,30,.1)}
+#home .wallet .coin{width:26px;height:26px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 34% 30%,#ffe89a,#ffc21e 55%,#c67a06);box-shadow:inset 0 -3px 0 rgba(0,0,0,.16)}
+#home .wallet b{font-weight:900;font-size:18px}
+#homeSet{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--ink2);background:rgba(255,255,255,.78);
+  box-shadow:0 3px 0 rgba(120,92,50,.16),0 5px 12px rgba(80,60,30,.1)}
+#homeSet svg{width:24px;height:24px}
+#homeSet:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(120,92,50,.16)}
+/* a phone on its side: the rings on the left, the title and the buttons on the right */
+@media (orientation:landscape) and (max-height:560px){
+  #home{display:grid;grid-template-columns:1.15fr 1fr;grid-template-rows:1fr auto;column-gap:2vw;
+    padding:calc(env(safe-area-inset-top) + 4vh) calc(env(safe-area-inset-right) + 3vw) calc(env(safe-area-inset-bottom) + 6vh) calc(env(safe-area-inset-left) + 2vw)}
+  #homeHero{grid-column:1;grid-row:1 / span 2;height:100%}
+  #homeTitle{grid-column:2;grid-row:1;align-self:end;justify-self:center;width:min(40vw,330px,92vh);margin-bottom:5vh}
+  #homeLow{grid-column:2;grid-row:2}}
+/* "HARD LEVEL" over the board for a beat on entering one (Seat Jam's #warn): it
+   plays and goes. ⚠ pointer-events none - it must never take the first drag.
+   game.js shows it; showing it again (hidden off, on) replays it. */
+#hardStamp{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:6}
+#hardStamp b{font-size:46px;line-height:1.05;text-align:center;color:#fff;max-width:6.2em;letter-spacing:.02em;
+  -webkit-text-stroke:9px var(--hard-e);paint-order:stroke fill;text-shadow:0 4px 0 var(--hard-e);animation:stamp 1.5s ease-out both}
+@keyframes stamp{0%{transform:scale(1.55);opacity:0}16%{transform:scale(1);opacity:1}68%{transform:scale(1);opacity:1}100%{transform:scale(1.08);opacity:0}}
+@media (prefers-reduced-motion:reduce){#hardStamp b{animation:stampfade 1.5s linear both}@keyframes stampfade{0%,80%{opacity:1}100%{opacity:0}}}
+@keyframes twinkle{50%{transform:scale(.55) rotate(25deg);opacity:.75}}
+@keyframes spin{to{transform:translate(-50%,-50%) rotate(360deg)}}
+
+/* ---------- play HUD ---------- */
+#hud{position:absolute;inset:0}
+/* the HUD in the middle (the owner, 2026-10-17): on a wide screen the bar is a
+   column the width of a phone, centred, not spread to the corners */
+#topbar{position:absolute;left:0;right:0;top:0;max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top) + 12px) 14px 14px;display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;height:40px;padding:0 14px;border-radius:20px;--lift:5px}
+.pill small{font-size:12px;letter-spacing:.6px;margin-right:6px;-webkit-text-stroke:3px var(--sti,var(--purple-i))}
+/* ⚠ HARD levels (20, 30, 40 ... - game.js isHard) in Seat Jam's orange. UI_UX_RULES 2.9:
+   the tag takes the word LEVEL's place, it never adds width. game.js writes the
+   word in the pill and the card's button; Home's button swaps it here. */
+:root{--hard:linear-gradient(180deg,#f8a477 0%,#e0673a 58%,#c9542a 100%);--hard-e:#ac4522;--hard-i:#7a2c10}
+.pill.hard{--face:var(--hard);--edge:var(--hard-e);--sti:var(--hard-i)}
+.pill b{font-weight:400;font-size:22px}
+/* UI_UX_RULES 2.2: the middle pill pinned with absolute, not two spacers */
+#scorePill{position:absolute;left:50%;transform:translateX(-50%);height:46px;min-width:122px;padding:0 18px 0 10px;border-radius:23px;justify-content:center;gap:6px}
+#scorePill svg{width:28px;height:28px;flex:none;filter:drop-shadow(0 2px 0 rgba(58,35,128,.6))}
+#scorePill b{font-size:25px;display:inline-block}
+/* 360 px: the pill keeps clear of the level pill and the restart button,
+   whatever the running total grows to (it only ever grows) */
+@media (max-width:380px){#scorePill{min-width:0;padding:0 12px 0 7px;gap:4px}#scorePill svg{width:23px;height:23px}#scorePill b{font-size:21px}
+  .pill{padding:0 11px}.pill small{font-size:11px;margin-right:4px}}
+#score.pop{animation:pop .3s}
+@keyframes pop{45%{transform:scale(1.22)}}
+.sp{flex:1}
+.ic{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center}
+.ic svg{width:26px;height:26px;filter:drop-shadow(0 2px 0 rgba(0,0,0,.22))}
+#boosters{position:absolute;left:0;right:0;bottom:0;padding:10px 14px calc(env(safe-area-inset-bottom) + 18px);display:flex;justify-content:center;gap:34px}
+/* UI_UX_RULES 2.13: the icon is the face of the button, about 2/3 of it */
+.tool{position:relative;width:72px;height:72px;border-radius:22px;border-width:3px;--lift:6px;display:flex;align-items:center;justify-content:center}
+.tool svg{width:50px;height:50px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.2))}
+.tool.locked{filter:grayscale(.85);opacity:.8}
+.tool.armed{animation:armed 1s infinite}
+@keyframes armed{50%{box-shadow:0 6px 0 var(--edge),0 0 0 9px rgba(255,226,90,.75),inset 0 -3px 0 rgba(0,0,0,.1)}}
+/* UI_UX_RULES 6.2: green is a count, grey a lock, blue an ad */
+.badge{position:absolute;top:-10px;right:-10px;min-width:28px;height:28px;padding:0 7px;border-radius:14px;font-size:17px;line-height:23px;text-align:center;color:#fff;
+  border:2.5px solid #fff;background:var(--gloss),var(--green);box-shadow:0 3px 0 var(--green-e),0 5px 8px rgba(0,0,0,.2);
+  -webkit-text-stroke:3px var(--green-i);paint-order:stroke fill}
+.badge.lock{background:var(--gloss),var(--grey);box-shadow:0 3px 0 var(--grey-e);-webkit-text-stroke-color:#3d4148;font-size:15px}
+.badge.ad{background:var(--gloss),var(--blue);box-shadow:0 3px 0 var(--blue-e);-webkit-text-stroke-color:var(--blue-i);font-size:13px}
+.badge.zero{background:var(--gloss),var(--grey);box-shadow:0 3px 0 var(--grey-e);-webkit-text-stroke-color:#3d4148}
+.zoomBtn{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 32px)}
+#zOut{left:max(14px,calc(50% - 246px))} #zIn{right:max(14px,calc(50% - 246px))}
+#banner{position:absolute;left:50%;top:calc(env(safe-area-inset-top) + 78px);transform:translateX(-50%);background:var(--gloss),var(--white);border:2.5px solid #fff;border-radius:18px;
+  padding:9px 10px 9px 18px;display:flex;gap:12px;align-items:center;box-shadow:0 4px 0 var(--white-e),0 8px 16px rgba(20,24,60,.25);font-weight:900;white-space:nowrap;color:var(--ink)}
+#banner button{padding:8px 14px;border-radius:12px;font-size:16px;--lift:3px}
+
+/* ---------- cards ----------
+   A white plate in a purple frame on a purple slab: the frame is box-shadow
+   rings, so no card needed a wrapper added. */
+.veil{position:absolute;inset:0;background:rgba(16,22,56,.55);display:flex;align-items:center;justify-content:center;padding:22px;pointer-events:auto}
+.card{width:100%;max-width:430px;background:linear-gradient(180deg,#ffffff,#eef1fb);border-radius:26px;padding:22px 20px 20px;text-align:center;
+  box-shadow:0 0 0 4px #fff,0 0 0 10px #7a55d9,0 12px 0 10px var(--purple-e),0 26px 40px rgba(10,10,40,.4);animation:cardIn .28s ease-out;position:relative}
+.card.wide{max-width:480px}
+@keyframes cardIn{from{transform:scale(.86);opacity:0}}
+.card h2{margin:0 0 8px;font-size:34px}
+.card p{margin:6px 0 14px;font-size:17px;font-weight:700;color:var(--ink2)}
+.btn{display:block;width:100%;padding:13px;border-radius:18px;font-size:25px;margin-top:14px;border-width:3px;--lift:5px}
+.btn.ghost{font-size:23px}
+/* ---------- the level-complete card: Seat Jam's, plate for plate ----------
+   (the owner, 2026-10-17: "the complete screen like SeatawayO too"). From
+   seatawayO/src/game_head.html #card and game3d.css: the room dimmed, a still
+   glow (below - not Seat Jam's sunburst), paper falling; a plate with a gloss,
+   a white rim and a deep slab, its face warm cream, a glossy band with the
+   title pressed out of it; Seat Jam's feature meter, its prize framed at the
+   end; one button. The prize - the gold - pops in with a flash and twinkles
+   where Seat Jam's stars land: this game has no stars, and three that never
+   change would pretend to rate the run.
+   ⚠ Purple, not Seat Jam's teal (the owner, 2026-10-17: "another colour, so it
+   is not Seat Jam"): the purple ring's, the title's on Home. The button is
+   Home's green LEVEL pill. */
+#win{background:rgba(34,18,58,.74);overflow:hidden}
+/* ⚠ The light behind the card is one still, soft, warm glow - nothing more.
+   The owner turned down, in turn (2026-10-17): Seat Jam's spinning sunburst
+   ("another light"), sweeping spotlights with rising motes ("too busy"), and a
+   landing flash with a breathing halo ("keep it really simple"). `screen` over
+   the dim, so it brightens and never greys. */
+#win .lights{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+#win .halo{position:absolute;left:50%;top:44%;width:min(600px,140vmin);aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%);mix-blend-mode:screen;
+  background:radial-gradient(closest-side,rgba(255,226,130,.42),rgba(255,190,80,.12) 55%,rgba(255,190,80,0) 100%)}
+#win .paper{position:absolute;inset:0;pointer-events:none}
+#win .paper i{position:absolute;top:-30px;left:var(--x);width:14px;height:20px;border-radius:3px;background:var(--c);
+  animation:fall var(--t) linear var(--d) infinite}
+@keyframes fall{from{transform:translateY(0) rotate(var(--r))}to{transform:translateY(calc(100vh + 60px)) rotate(calc(var(--r) + 720deg))}}
+.card.done{max-width:316px;padding:6px;border-radius:32px;margin-top:104px;
+  background:linear-gradient(180deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 47%),linear-gradient(180deg,#c9a9f7,#8657d6);
+  box-shadow:0 0 0 4px #fff,0 14px 0 4px #5a33a0,0 22px 24px rgba(0,0,0,.35),inset 0 4px 0 rgba(255,255,255,.55),inset 0 -6px 0 rgba(0,0,0,.14)}
+.card.done .face{border-radius:27px;overflow:hidden;padding:0 0 22px;
+  background:linear-gradient(180deg,#fbfaf6 0%,#f3f2ed 45%,#e3e1d8 100%);
+  box-shadow:inset 0 5px 0 rgba(255,255,255,.95),inset 0 -14px 18px rgba(84,56,140,.14),inset 0 0 0 2px rgba(134,87,214,.22)}
+.card.done .band{height:60px;display:grid;place-items:center;border-radius:27px 27px 0 0;
+  background:linear-gradient(180deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 47%),linear-gradient(180deg,#c4a0ff 0%,#9a66ea 60%,#8352d6 100%);
+  box-shadow:inset 0 3px 0 rgba(255,255,255,.5),inset 0 -4px 0 rgba(0,0,0,.12),0 6px 0 #5f37ad,0 10px 10px rgba(0,0,0,.2)}
+.card.done .band span{font-size:28px;line-height:1;color:#fff;letter-spacing:.4px;-webkit-text-stroke:6px #3b1d78;paint-order:stroke fill;
+  text-shadow:0 2px 0 #3b1d78,0 4px 0 #3b1d78,0 7px 8px rgba(0,0,0,.35)}
+/* the gold: Seat Jam's "+100", and where its stars pop in */
+.winGold{display:flex;align-items:center;justify-content:center;gap:10px;margin:22px 0 2px;font-size:42px;line-height:1;color:#ffd964;
+  -webkit-text-stroke:6px #6b3d00;paint-order:stroke fill;text-shadow:0 3px 0 #6b3d00,0 6px 8px rgba(0,0,0,.25)}
+.winGold .cn{position:relative;width:54px;height:54px;flex:none;transform:scale(.1);animation:starpop .32s cubic-bezier(.34,1.56,.64,1) .3s forwards}
+.winGold .cn svg{position:relative;width:100%;height:100%;filter:drop-shadow(0 4px 0 #a5620a) drop-shadow(0 9px 8px rgba(0,0,0,.28))}
+.winGold .cn:before{content:"";position:absolute;left:50%;top:50%;width:130px;height:130px;border-radius:50%;opacity:0;mix-blend-mode:screen;pointer-events:none;
+  background:radial-gradient(circle,rgba(255,224,122,.95),rgba(255,224,122,.35) 45%,transparent 70%);animation:flashout .42s ease-out .6s}
+.winGold .cn i{position:absolute;left:50%;top:50%;width:22px;height:22px;border-radius:50%;background:#ffe07a;opacity:0;pointer-events:none;
+  animation:sparkout .5s ease-out .6s}
+.winGold .cn i:nth-child(1){--sx:-62px;--sy:-40px}
+.winGold .cn i:nth-child(2){--sx:64px;--sy:-46px}
+.winGold .cn i:nth-child(3){--sx:-78px;--sy:18px}
+.winGold .cn i:nth-child(4){--sx:80px;--sy:22px}
+.winGold .cn i:nth-child(5){--sx:-30px;--sy:-74px}
+.winGold .cn i:nth-child(6){--sx:34px;--sy:-72px}
+@keyframes starpop{to{transform:scale(1)}}
+@keyframes flashout{from{transform:translate(-50%,-50%) scale(.25);opacity:.8}to{transform:translate(-50%,-50%) scale(1);opacity:0}}
+@keyframes sparkout{from{transform:translate(-50%,-50%) scale(.45);opacity:1}to{transform:translate(calc(-50% + var(--sx)),calc(-50% + var(--sy))) scale(.02);opacity:0}}
+/* The feature meter, Seat Jam's "30% TO NEXT FEATURE" (the owner, 2026-10-17:
+   "how many levels until something new opens"): a purple groove, a sky-blue fill
+   that game.js runs from where the player was to where they are now, and the
+   new thing framed at the end. Hidden once every feature is open. */
+#winFeat{margin:16px 26px 0 20px}
+#winFeat .barRow{position:relative;padding-right:34px}
+#winFeat .track{height:21px;border-radius:11px;padding:3px;overflow:hidden;background:linear-gradient(180deg,#7a4fc4,#a283e0);
+  box-shadow:inset 0 4px 5px rgba(40,18,84,.55),0 0 0 3px #fff,0 3px 0 3px #c9c6bb}
+#winFeat .track i{display:block;height:100%;width:0;border-radius:10px;
+  background:linear-gradient(180deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,.16) 46%,rgba(255,255,255,0) 47%),linear-gradient(180deg,#8fe0f7 0%,#4bb0d8 60%,#2d8fbd 100%);
+  transition:width .9s cubic-bezier(.33,1,.68,1)}
+#winFeat .badge{position:absolute;right:-8px;top:50%;width:52px;height:52px;margin-top:-26px;border-radius:14px;display:grid;place-items:center;
+  background:#7448c4;box-shadow:0 6px 0 #522c98,0 10px 10px rgba(0,0,0,.28),0 0 0 3px #fff}
+#winFeat .badge:before{content:"";position:absolute;inset:3px;border-radius:11px;background:linear-gradient(180deg,#d2baf8,#a283e0)}
+#winFeat .badge:after{content:"";position:absolute;inset:7px;border-radius:8px;background:linear-gradient(180deg,#fbfaf6,#e3e1d8);box-shadow:inset 0 3px 4px rgba(84,56,140,.22)}
+#winFeat .badge svg{position:relative;z-index:1;width:32px;height:32px}
+/* full: the prize lands next level - it bounces three times */
+#winFeat .badge.hit{animation:badgehit .26s ease-in-out .9s 3 alternate}
+@keyframes badgehit{to{transform:scale(1.14)}}
+#winFeat .lab{margin-top:18px;font-family:'Lilita One','Nunito',sans-serif;font-weight:400;font-size:14px;letter-spacing:.3px;color:#6a45ad;
+  text-shadow:0 2px 0 #fff;text-transform:uppercase}
+/* Next: the same green candy pill as Home's LEVEL button */
+.card.done .btn{position:relative;display:block;width:176px;height:54px;margin:20px auto 0;padding:0 0 3px;border-radius:27px;border:0;
+  font:900 21px/1 'Nunito',system-ui,sans-serif;letter-spacing:.6px;color:#fff;-webkit-text-stroke:0;text-shadow:0 2px 0 rgba(22,92,14,.45);
+  background:linear-gradient(180deg,#8ce866 0%,#54c63c 52%,#3aac2c 100%);
+  box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 5px 0 #2a8b22,0 10px 16px rgba(40,100,30,.28)}
+.card.done .btn:before{content:"";position:absolute;left:16px;right:16px;top:4px;height:16px;border-radius:9px;
+  background:linear-gradient(180deg,rgba(255,255,255,.62),rgba(255,255,255,.1));pointer-events:none}
+.card.done .btn small{font-size:16px;margin-right:5px}
+.card.done .btn:active{transform:translateY(3px);box-shadow:inset 0 -3px 0 rgba(0,0,0,.1),0 2px 0 #2a8b22,0 4px 8px rgba(40,100,30,.25)}
+/* ---- the bee: cheers over the card on every win ----
+   The original has its squirrel do this; the squirrel is Nebula's art, so the
+   cheer here is a bee of our own (the owner, 2026-10-17). Plain SVG in the
+   card: #win going from
+   hidden to shown restarts every animation, so game.js runs none of it. It
+   flies in from the left, then hovers, wings a blur, pom-poms waving. */
+.cheer{position:absolute;left:50%;bottom:calc(100% - 16px);width:132px;height:120px;margin-left:-66px;pointer-events:none;
+  animation:beeIn .8s cubic-bezier(.2,1.25,.4,1) .12s both}
+.cheer .bee{width:100%;height:100%;animation:beeBob 1.05s ease-in-out .95s infinite alternate}
+.cheer svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 8px 10px rgba(0,0,0,.35))}
+.cheer .wingL,.cheer .wingR,.cheer .armL,.cheer .armR{transform-box:fill-box}
+.cheer .wingL{transform-origin:92% 80%;animation:flapL .1s ease-in-out infinite alternate}
+.cheer .wingR{transform-origin:8% 80%;animation:flapR .1s ease-in-out infinite alternate}
+.cheer .armL{transform-origin:88% 92%;animation:waveL .36s ease-in-out infinite alternate}
+.cheer .armR{transform-origin:12% 92%;animation:waveR .36s ease-in-out .18s infinite alternate}
+.cheer .spk{position:absolute;width:20px;height:20px;background:#fff;filter:drop-shadow(0 2px 0 rgba(0,0,0,.25));
+  clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);animation:twinkle 1.4s ease-in-out infinite}
+.cheer .spk:nth-of-type(1){left:-18px;top:30%;animation-delay:.3s}
+.cheer .spk:nth-of-type(2){right:-22px;top:8%;width:28px;height:28px;background:#ffe24d;animation-delay:.8s}
+.cheer .spk:nth-of-type(3){right:-8px;bottom:18%;width:15px;height:15px}
+@keyframes beeIn{0%{transform:translate(-200px,70px) rotate(-28deg) scale(.45);opacity:0}55%{opacity:1}100%{transform:none;opacity:1}}
+@keyframes beeBob{to{transform:translateY(-10px) rotate(3deg)}}
+@keyframes flapL{from{transform:rotate(-16deg)}to{transform:rotate(12deg) scaleY(.8)}}
+@keyframes flapR{from{transform:rotate(16deg)}to{transform:rotate(-12deg) scaleY(.8)}}
+@keyframes waveL{from{transform:rotate(14deg)}to{transform:rotate(-18deg)}}
+@keyframes waveR{from{transform:rotate(-14deg)}to{transform:rotate(18deg)}}
+/* a short screen (a phone on its side): a smaller bee, less room above the card */
+@media (max-height:640px){.card.done{margin-top:82px}.cheer{width:100px;height:91px;margin-left:-50px;bottom:calc(100% - 12px)}
+  .card.done .band{height:52px}.card.done .band span{font-size:25px}
+  .winGold{margin:16px 0 2px;font-size:36px}.winGold .cn{width:46px;height:46px}
+  #winFeat{margin-top:12px}#winFeat .lab{margin-top:16px;font-size:13px}
+  .card.done .btn{height:50px;margin-top:14px;font-size:20px}.card.done .face{padding-bottom:16px}}
+/* a phone on its side: no room above the card at all, so the bee cheers from its left */
+@media (max-height:460px){#win{padding:8px}.card.done{margin-top:0;max-width:300px}
+  .cheer{left:auto;right:calc(100% - 14px);bottom:30px;margin-left:0}
+  .card.done .band{height:44px}.card.done .band span{font-size:22px}
+  .winGold{margin:10px 0 0;font-size:30px}.winGold .cn{width:38px;height:38px}
+  #winFeat{margin-top:10px}#winFeat .badge{width:44px;height:44px;margin-top:-22px}#winFeat .badge svg{width:27px;height:27px}#winFeat .lab{margin-top:12px;font-size:12px}
+  .card.done .btn{width:170px;height:44px;margin-top:10px;font-size:18px}.card.done .face{padding-bottom:10px}}
+.introArt{width:150px;height:110px;margin:0 auto 6px;display:flex;align-items:center;justify-content:center}
+.introArt svg{width:100%;height:100%;filter:drop-shadow(0 4px 0 rgba(36,48,94,.15))}
+.row{display:flex;gap:12px}
+.row .btn{flex:1}
+
+/* settings */
+.sheet{width:100%;max-width:400px;background:linear-gradient(180deg,#ffffff,#eef1fb);border-radius:24px;padding:18px 18px 20px;
+  box-shadow:0 0 0 4px #fff,0 0 0 10px #7a55d9,0 12px 0 10px var(--purple-e),0 26px 40px rgba(10,10,40,.4);animation:cardIn .2s}
+.sheet h2{margin:0 0 12px;text-align:center;font-size:32px}
+.opt{display:flex;align-items:center;justify-content:space-between;padding:10px 4px;font-size:19px;font-weight:900;color:var(--ink)}
+.sw{width:64px;height:36px;border-radius:18px;background:#c9cfdd;position:relative;transition:background .2s;box-shadow:inset 0 3px 4px rgba(20,40,80,.3),0 0 0 2.5px #fff}
+.sw:after{content:"";position:absolute;left:4px;top:4px;width:28px;height:28px;border-radius:50%;background:#fff;box-shadow:0 3px 0 rgba(36,48,94,.25);transition:left .2s}
+.sw.on{background:#4cbf35}
+.sw.on:after{left:32px}
+.dev{margin-top:12px;padding-top:10px;border-top:2px dashed #d3d9ea;display:flex;gap:8px;align-items:center;font-size:14px;font-weight:800;color:var(--ink2)}
+.dev input{width:84px;height:44px;border-radius:12px;border:2.5px solid #d3d9ea;background:#fff;font:inherit;font-size:18px;text-align:center;color:var(--ink)}
+.dev button{height:44px;padding:0 14px;border-radius:12px;font-weight:900;--lift:3px}
+/* the one destructive button: in Settings only, smaller than Resume, and it asks first */
+.btn.restartAll{font-size:19px;padding:10px;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.restartAll svg{width:22px;height:22px}
+.linkBtn{background:none;color:var(--ink2);text-decoration:underline;font-weight:800;font-size:15px;padding:12px;min-height:44px}
+#privacy .sheet{max-height:86vh;overflow:auto;text-align:left;font-size:15px;line-height:1.45}
+#privacy h1{font-size:24px;margin:4px 0}
+#privacy h2{font-size:18px;text-align:left;margin:14px 0 4px}
+
+/* toast */
+#toast{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 122px);transform:translateX(-50%);background:rgba(28,36,80,.9);color:#fff;border:2.5px solid rgba(255,255,255,.9);
+  padding:9px 18px;border-radius:16px;font-weight:800;font-size:16px;white-space:nowrap;transition:opacity .25s;opacity:0;box-shadow:0 6px 14px rgba(10,10,40,.3)}
+#toast.show{opacity:1}
+
+/* gold: 10 a win, spent on boosters you are out of */
+.wallet{height:44px;padding:0 18px 0 7px;border-radius:22px;gap:6px}
+.wallet svg{width:30px;height:30px;flex:none;filter:drop-shadow(0 2px 0 rgba(0,0,0,.2))}
+.wallet b{font-size:24px}
+/* UI_UX_RULES 6.2: the price badge is gold, the count badge green */
+.badge.price{display:flex;align-items:center;gap:1px;padding:0 7px 0 2px;background:var(--gloss),var(--orange);box-shadow:0 3px 0 var(--orange-e),0 5px 8px rgba(0,0,0,.2);
+  -webkit-text-stroke-color:var(--orange-i)}
+.badge.price svg{width:20px;height:20px;filter:none}
+.tool.poor{opacity:.55;filter:saturate(.4)}
+/* the win card says what was earned, in gold, where it is paid (UI_UX_RULES 3.9) */
+.buyIc{width:100px;height:100px;margin:4px auto 14px;border-radius:26px;display:flex;align-items:center;justify-content:center;--lift:6px;border-width:3px}
+.buyIc svg{width:68px;height:68px;filter:drop-shadow(0 3px 0 rgba(0,0,0,.2))}
+.btn .coin{width:28px;height:28px;vertical-align:-6px;margin:0 3px 0 10px}
+
+/* tutorial: a hand, no words (the owner: "a tutorial needs no text") */
+#tut{position:absolute;inset:0;pointer-events:none}
+#hand{position:absolute;width:56px;height:64px;transform-origin:30% 6%;filter:drop-shadow(0 4px 2px rgba(0,0,0,.3))}
+#hand svg{width:100%;height:100%}
+/* booster lesson: the board goes dark, the one button to press stays lit */
+#coachDim{position:absolute;inset:0;background:rgba(16,22,56,.6);z-index:1;pointer-events:auto}
+.tool.teach{z-index:3;animation:teach 1s infinite}
+@keyframes teach{50%{box-shadow:0 6px 0 var(--edge),0 0 0 12px rgba(255,226,90,.8),inset 0 -3px 0 rgba(0,0,0,.1)}}
+/* the way out of a lesson: an X, no words (UI_UX_RULES 6.7) */
+#coachSkip{position:absolute;right:max(14px,calc(50% - 246px));top:calc(env(safe-area-inset-top) + 74px);z-index:4}
+/* UI_UX_RULES 6.6: the wrapper holds the position and the flip, the image does
+   the tapping - one transform each, or the tap keyframes wipe out the flip */
+#coachHand{position:absolute;width:58px;height:66px;z-index:5;pointer-events:none;transform-origin:30% 6%}
+#coachHand.down{transform:rotate(180deg)}
+#coachHand svg{width:100%;height:100%;animation:tap .9s infinite ease-in-out;filter:drop-shadow(0 3px 2px rgba(0,0,0,.3))}
+@keyframes tap{50%{transform:translateY(10px) scale(.94)}}
+@media (prefers-reduced-motion:reduce){#winFeat .badge.hit,#coachHand svg,.tool.teach,.tool.armed,#boot .dots i,#win .lights *,.cheer,.cheer *{animation:none}#win .paper{display:none}.winGold .cn{animation:none;transform:none}.winGold .cn:before,.winGold .cn i{display:none}}
+/* no WebGL: render.js paints its own cream board, and the HUD keeps the toy look */
+html.flat,html.flat body{background:#f6e9d3}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="boot"><div class="dots"><i></i><i></i><i></i></div></div>
+<div id="app">
+  <section id="home" hidden>
+    <div id="homeTitle" role="img" aria-label="Ring Twist"><svg class="ttl" viewBox="0 0 2816 1899" aria-hidden="true"><defs><linearGradient id="tt0" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="-20"><stop offset="0" stop-color="#ea8a87"/><stop offset="1" stop-color="#c53c3a"/></linearGradient><linearGradient id="tt1" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="-20"><stop offset="0" stop-color="#f3ba7d"/><stop offset="1" stop-color="#d27f2c"/></linearGradient><linearGradient id="tt2" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="-20"><stop offset="0" stop-color="#a3db87"/><stop offset="1" stop-color="#60af3a"/></linearGradient><linearGradient id="tt3" gradientUnits="userSpaceOnUse" x1="0" y1="720" x2="0" y2="-20"><stop offset="0" stop-color="#80cdea"/><stop offset="1" stop-color="#2e9bc6"/></linearGradient><linearGradient id="tt4" gradientUnits="userSpaceOnUse" x1="0" y1="-185" x2="0" y2="-925"><stop offset="0" stop-color="#91abea"/><stop offset="1" stop-color="#476ac6"/></linearGradient><linearGradient id="tt5" gradientUnits="userSpaceOnUse" x1="0" y1="-185" x2="0" y2="-925"><stop offset="0" stop-color="#bf8fec"/><stop offset="1" stop-color="#8843c9"/></linearGradient><linearGradient id="tt6" gradientUnits="userSpaceOnUse" x1="0" y1="-185" x2="0" y2="-925"><stop offset="0" stop-color="#ea8a87"/><stop offset="1" stop-color="#c53c3a"/></linearGradient><linearGradient id="tt7" gradientUnits="userSpaceOnUse" x1="0" y1="-185" x2="0" y2="-925"><stop offset="0" stop-color="#f3ba7d"/><stop offset="1" stop-color="#d27f2c"/></linearGradient><linearGradient id="tt8" gradientUnits="userSpaceOnUse" x1="0" y1="-185" x2="0" y2="-925"><stop offset="0" stop-color="#a3db87"/><stop offset="1" stop-color="#60af3a"/></linearGradient></defs><g transform="translate(1408 842) scale(1 -1)"><g fill="#fff" stroke="#fff" stroke-width="128" stroke-linejoin="round"><path transform="translate(-1120.5 -70)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z"/><path transform="translate(-416.5 -70)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z"/><path transform="translate(-134.5 -70)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z"/><path transform="translate(469.5 -70)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z"/><path transform="translate(-1335 -975)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z"/><path transform="translate(-744 -975)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z"/><path transform="translate(119 -975)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z"/><path transform="translate(401 -975)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z"/><path transform="translate(888 -975)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z"/><path transform="translate(-1120.5 0)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z"/><path transform="translate(-416.5 0)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z"/><path transform="translate(-134.5 0)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z"/><path transform="translate(469.5 0)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z"/><path transform="translate(-1335 -905)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z"/><path transform="translate(-744 -905)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z"/><path transform="translate(119 -905)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z"/><path transform="translate(401 -905)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z"/><path transform="translate(888 -905)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z"/></g><circle cx="-268.5" cy="624" r="88.1" fill="none" stroke="#fff" stroke-width="177.7"/><circle cx="267" cy="-281" r="88.1" fill="none" stroke="#fff" stroke-width="177.7"/><path transform="translate(-1120.5 -70)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="#993033"/><path transform="translate(-416.5 -70)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#a36229"/><path transform="translate(-134.5 -70)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="#4d8533"/><path transform="translate(469.5 -70)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="#28779c"/><path transform="translate(-1335 -975)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="#3a529c"/><path transform="translate(-744 -975)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="#6b359e"/><path transform="translate(119 -975)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#993033"/><path transform="translate(401 -975)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="#a36229"/><path transform="translate(888 -975)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="#4d8533"/><circle cx="-268.5" cy="589" r="88.1" fill="none" stroke="#a36229" stroke-width="49.7"/><circle cx="267" cy="-316" r="88.1" fill="none" stroke="#993033" stroke-width="49.7"/><path transform="translate(-1120.5 -56)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="#993033"/><path transform="translate(-416.5 -56)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#a36229"/><path transform="translate(-134.5 -56)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="#4d8533"/><path transform="translate(469.5 -56)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="#28779c"/><path transform="translate(-1335 -961)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="#3a529c"/><path transform="translate(-744 -961)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="#6b359e"/><path transform="translate(119 -961)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#993033"/><path transform="translate(401 -961)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="#a36229"/><path transform="translate(888 -961)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="#4d8533"/><circle cx="-268.5" cy="603" r="88.1" fill="none" stroke="#a36229" stroke-width="49.7"/><circle cx="267" cy="-302" r="88.1" fill="none" stroke="#993033" stroke-width="49.7"/><path transform="translate(-1120.5 -42)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="#993033"/><path transform="translate(-416.5 -42)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#a36229"/><path transform="translate(-134.5 -42)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="#4d8533"/><path transform="translate(469.5 -42)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="#28779c"/><path transform="translate(-1335 -947)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="#3a529c"/><path transform="translate(-744 -947)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="#6b359e"/><path transform="translate(119 -947)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#993033"/><path transform="translate(401 -947)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="#a36229"/><path transform="translate(888 -947)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="#4d8533"/><circle cx="-268.5" cy="617" r="88.1" fill="none" stroke="#a36229" stroke-width="49.7"/><circle cx="267" cy="-288" r="88.1" fill="none" stroke="#993033" stroke-width="49.7"/><path transform="translate(-1120.5 -28)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="#993033"/><path transform="translate(-416.5 -28)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#a36229"/><path transform="translate(-134.5 -28)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="#4d8533"/><path transform="translate(469.5 -28)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="#28779c"/><path transform="translate(-1335 -933)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="#3a529c"/><path transform="translate(-744 -933)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="#6b359e"/><path transform="translate(119 -933)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#993033"/><path transform="translate(401 -933)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="#a36229"/><path transform="translate(888 -933)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="#4d8533"/><circle cx="-268.5" cy="631" r="88.1" fill="none" stroke="#a36229" stroke-width="49.7"/><circle cx="267" cy="-274" r="88.1" fill="none" stroke="#993033" stroke-width="49.7"/><path transform="translate(-1120.5 -14)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="#993033"/><path transform="translate(-416.5 -14)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#a36229"/><path transform="translate(-134.5 -14)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="#4d8533"/><path transform="translate(469.5 -14)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="#28779c"/><path transform="translate(-1335 -919)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="#3a529c"/><path transform="translate(-744 -919)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="#6b359e"/><path transform="translate(119 -919)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="#993033"/><path transform="translate(401 -919)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="#a36229"/><path transform="translate(888 -919)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="#4d8533"/><circle cx="-268.5" cy="645" r="88.1" fill="none" stroke="#a36229" stroke-width="49.7"/><circle cx="267" cy="-260" r="88.1" fill="none" stroke="#993033" stroke-width="49.7"/><path transform="translate(-1120.5 0)" d="M165 -10Q113 -10 85 18.5Q57 47 57 99L57 596Q57 649 85.5 677Q114 705 166 705L415 705Q537 705 603.5 644.5Q670 584 670 479Q670 410 640 359.5Q610 309 553.5 281.5Q497 254 415 254L422 273L479 273Q523 273 557 252.5Q591 232 613 191L648 128Q667 94 665.5 62.5Q664 31 640.5 10.5Q617 -10 570 -10Q525 -10 496 8.5Q467 27 445 67L359 224Q351 239 336 245.5Q321 252 305 252L272 252L272 99Q272 47 245 18.5Q218 -10 165 -10ZM272 402L375 402Q419 402 442.5 419Q466 436 466 472Q466 507 442.5 524Q419 541 375 541L272 541Z" fill="url(#tt0)"/><path transform="translate(-416.5 0)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="url(#tt1)"/><path transform="translate(-134.5 0)" d="M148 -10Q98 -10 71 17Q44 44 44 95L44 399Q44 450 70.5 477Q97 504 146 504Q195 504 221 477Q247 450 247 399L247 365L236 415Q261 458 304.5 482Q348 506 403 506Q462 506 500 482.5Q538 459 557 410.5Q576 362 576 287L576 95Q576 44 549 17Q522 -10 472 -10Q422 -10 395 17Q368 44 368 95L368 279Q368 317 356 332.5Q344 348 322 348Q291 348 271.5 327.5Q252 307 252 272L252 95Q252 -10 148 -10Z" fill="url(#tt2)"/><path transform="translate(469.5 0)" d="M297 -192Q242 -192 195.5 -185.5Q149 -179 117 -169Q83 -159 68 -137.5Q53 -116 52.5 -91.5Q52 -67 63.5 -46.5Q75 -26 95.5 -16Q116 -6 141 -15Q185 -30 219 -35Q253 -40 276 -40Q335 -40 363.5 -18.5Q392 3 392 52L392 99L400 99Q384 62 339 37.5Q294 13 243 13Q178 13 128.5 43.5Q79 74 51.5 129.5Q24 185 24 259Q24 315 40 360.5Q56 406 85 438.5Q114 471 154 488.5Q194 506 243 506Q296 506 339.5 482Q383 458 398 421L389 371L389 399Q389 450 416 477Q443 504 492 504Q542 504 568 477Q594 450 594 399L594 75Q594 -58 517 -125Q440 -192 297 -192ZM311 165Q335 165 352.5 176Q370 187 379.5 208Q389 229 389 259Q389 305 367.5 329.5Q346 354 311 354Q288 354 270 343Q252 332 242.5 311Q233 290 233 259Q233 213 254.5 189Q276 165 311 165Z" fill="url(#tt3)"/><path transform="translate(-1335 -905)" d="M329 -10Q277 -10 249 18.5Q221 47 221 99L221 531L85 531Q42 531 19.5 553.5Q-3 576 -3 618Q-3 660 19.5 682.5Q42 705 85 705L572 705Q615 705 637.5 682.5Q660 660 660 618Q660 576 637.5 553.5Q615 531 572 531L436 531L436 99Q436 47 409 18.5Q382 -10 329 -10Z" fill="url(#tt4)"/><path transform="translate(-744 -905)" d="M273 -10Q233 -10 204.5 9Q176 28 159 68L27 373Q12 408 16.5 437.5Q21 467 44.5 485.5Q68 504 111 504Q146 504 169.5 487Q193 470 212 421L295 215L274 215L362 445Q373 475 392.5 489.5Q412 504 443 504Q475 504 494 489Q513 474 524 445L613 215L597 215L679 428Q696 472 722 488Q748 504 776 504Q815 504 836 485.5Q857 467 860 437Q863 407 848 372L718 69Q701 29 672.5 9.5Q644 -10 604 -10Q564 -10 536 9.5Q508 29 491 69L393 304L475 304L384 71Q368 30 340.5 10Q313 -10 273 -10Z" fill="url(#tt5)"/><path transform="translate(119 -905)" d="M148 -10Q98 -10 71 19Q44 48 44 103L44 391Q44 446 71 475Q98 504 148 504Q198 504 225 475Q252 446 252 391L252 103Q252 48 225.5 19Q199 -10 148 -10Z" fill="url(#tt6)"/><path transform="translate(401 -905)" d="M251 -12Q205 -12 161.5 -6.5Q118 -1 81 12Q51 22 38 41.5Q25 61 25 83Q25 105 36.5 123.5Q48 142 68 150.5Q88 159 114 151Q156 138 189 132Q222 126 251 126Q282 126 294 133.5Q306 141 306 152Q306 163 298 168Q290 173 278 174L161 192Q99 202 64 237.5Q29 273 29 331Q29 385 60 424Q91 463 145.5 484.5Q200 506 270 506Q316 506 352 500.5Q388 495 423 481Q448 471 459 452Q470 433 468.5 411Q467 389 455.5 371Q444 353 423.5 345.5Q403 338 376 347Q342 358 318 363Q294 368 274 368Q237 368 224 360.5Q211 353 211 342Q211 335 217.5 329Q224 323 237 321L354 303Q418 293 453 259Q488 225 488 166Q488 81 423 34.5Q358 -12 251 -12Z" fill="url(#tt7)"/><path transform="translate(888 -905)" d="M322 -12Q242 -12 190 12Q138 36 112.5 84.5Q87 133 87 207L87 342L64 342Q27 342 6.5 361.5Q-14 381 -14 418Q-14 455 6.5 474.5Q27 494 64 494L87 494L87 540Q87 591 114 618Q141 645 191 645Q241 645 268 618Q295 591 295 540L295 494L363 494Q401 494 421 474.5Q441 455 441 418Q441 381 421 361.5Q401 342 363 342L295 342L295 212Q295 182 310.5 168Q326 154 359 154Q371 154 384 157Q397 160 409 160Q427 161 438.5 149Q450 137 450 94Q450 59 439.5 35.5Q429 12 402 1Q387 -5 361.5 -8.5Q336 -12 322 -12Z" fill="url(#tt8)"/><circle cx="-268.5" cy="659" r="88.1" fill="none" stroke="#f0a558" stroke-width="49.7"/><circle cx="267" cy="-246" r="88.1" fill="none" stroke="#e46965" stroke-width="49.7"/></g></svg></div>
+    <div id="homeHero"><svg class="heroFlat" viewBox="261 781 558 457" aria-hidden="true"><defs><linearGradient id="hr0" gradientUnits="userSpaceOnUse" x1="0" y1="791" x2="0" y2="1003"><stop offset="0" stop-color="#d2adff"/><stop offset=".5" stop-color="#984be0"/><stop offset="1" stop-color="#6b2fb0"/></linearGradient><linearGradient id="hr1" gradientUnits="userSpaceOnUse" x1="0" y1="986" x2="0" y2="1198"><stop offset="0" stop-color="#8fe0ff"/><stop offset=".5" stop-color="#2fa8e8"/><stop offset="1" stop-color="#1a78b8"/></linearGradient><linearGradient id="hr2" gradientUnits="userSpaceOnUse" x1="0" y1="986" x2="0" y2="1198"><stop offset="0" stop-color="#ffc874"/><stop offset=".5" stop-color="#ff8c26"/><stop offset="1" stop-color="#d6620f"/></linearGradient><linearGradient id="hc_blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fe0ff"/><stop offset="1" stop-color="#2fa8e8"/></linearGradient><linearGradient id="hc_purple" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d2adff"/><stop offset="1" stop-color="#984be0"/></linearGradient></defs><ellipse cx="540" cy="1200" rx="249" ry="20" fill="#d9a35c" opacity=".42"/><path d="M494.4 823.7A86 86 0 1 0 585.6 823.7" stroke="#5b2fa0" stroke-width="40" fill="none" stroke-linecap="round"/><path d="M494.4 823.7A86 86 0 1 0 585.6 823.7" stroke="url(#hr0)" stroke-width="30" fill="none" stroke-linecap="round"/><path d="M479.5 947.4A79 79 0 0 0 600.5 947.4" stroke="#000" stroke-width="6" opacity=".13" fill="none" stroke-linecap="round"/><path d="M354.3 1137.6A86 86 0 1 0 354.3 1046.4" stroke="#13689e" stroke-width="40" fill="none" stroke-linecap="round"/><path d="M354.3 1137.6A86 86 0 1 0 354.3 1046.4" stroke="url(#hr1)" stroke-width="30" fill="none" stroke-linecap="round"/><path d="M497.7 1032.9A92 92 0 0 0 361.0 1028.1" stroke="#fff" stroke-width="7" opacity=".6" fill="none" stroke-linecap="round"/><path d="M370.4 1146.9A79 79 0 0 0 487.7 1142.8" stroke="#000" stroke-width="6" opacity=".13" fill="none" stroke-linecap="round"/><path d="M725.7 1046.4A86 86 0 1 0 725.7 1137.6" stroke="#b8520c" stroke-width="40" fill="none" stroke-linecap="round"/><path d="M725.7 1046.4A86 86 0 1 0 725.7 1137.6" stroke="url(#hr2)" stroke-width="30" fill="none" stroke-linecap="round"/><path d="M719.0 1028.1A92 92 0 0 0 582.3 1032.9" stroke="#fff" stroke-width="7" opacity=".6" fill="none" stroke-linecap="round"/><path d="M592.3 1142.8A79 79 0 0 0 709.6 1146.9" stroke="#000" stroke-width="6" opacity=".13" fill="none" stroke-linecap="round"/><g transform="translate(540.0 896.7) rotate(120.0)"><rect x="95.0" y="-11" width="44.6" height="22" rx="5" fill="#6b2fb0" stroke="#5b2fa0" stroke-width="3.5"/></g><g transform="translate(540.0 896.7) rotate(60.0)"><rect x="95.0" y="-11" width="44.6" height="22" rx="5" fill="#6b2fb0" stroke="#5b2fa0" stroke-width="3.5"/></g><g transform="translate(427.2 1092.0) rotate(0.0)"><rect x="95.0" y="-11" width="44.6" height="22" rx="5" fill="#1a78b8" stroke="#13689e" stroke-width="3.5"/></g><g transform="translate(470.2 1017.5) rotate(120.0)"><rect x="-23" y="-17" width="46" height="34" rx="9" fill="url(#hc_purple)" stroke="#5b2fa0" stroke-width="4"/><rect x="-15" y="-12" width="30" height="9" rx="4.5" fill="#fff" opacity=".45"/></g><g transform="translate(609.8 1017.5) rotate(60.0)"><rect x="-23" y="-17" width="46" height="34" rx="9" fill="url(#hc_purple)" stroke="#5b2fa0" stroke-width="4"/><rect x="-15" y="-12" width="30" height="9" rx="4.5" fill="#fff" opacity=".45"/></g><g transform="translate(566.8 1092.0) rotate(0.0)"><rect x="-23" y="-17" width="46" height="34" rx="9" fill="url(#hc_blue)" stroke="#13689e" stroke-width="4"/><rect x="-15" y="-12" width="30" height="9" rx="4.5" fill="#fff" opacity=".45"/></g><path d="M842.0 800.0L847.6 814.4L862.0 820.0L847.6 825.6L842.0 840.0L836.4 825.6L822.0 820.0L836.4 814.4Z" fill="#fff"/><path d="M236.0 831.0L240.2 841.8L251.0 846.0L240.2 850.2L236.0 861.0L231.8 850.2L221.0 846.0L231.8 841.8Z" fill="#fff"/></svg></div>
+    <div id="logo" aria-hidden="true"></div>
+    <div id="homeLow">
+      <button class="playBtn" id="playBtn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.6c0-1.2 1.3-1.9 2.3-1.3l10.4 6.9c.9.6.9 2 0 2.6L9.8 19.7c-1 .6-2.3-.1-2.3-1.3z"/></svg><span><small>LEVEL</small> <b id="homeLevel">1</b></span></button>
+      <div class="homeRow">
+        <div class="wallet" title="Gold"><i class="coin"></i><b id="homeGoldN">0</b></div>
+        <button id="homeSet" title="Settings" aria-label="Settings"><svg viewBox="0 0 32 32"><use href="#i-gear"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="hud" hidden>
+    <div id="topbar">
+      <div class="pill toy t-purple font st"><small>LEVEL</small><b id="lvNum">1</b></div>
+      <div id="scorePill" class="pill toy t-purple font st" title="Gold"><svg viewBox="0 0 32 32"><use href="#i-coin"/></svg><b id="score">0</b></div>
+      <span class="sp"></span>
+      <button class="ic toy t-purple" id="btnRestart" title="Restart" aria-label="Restart level"><svg viewBox="0 0 32 32"><use href="#i-restart"/></svg></button>
+      <button class="ic toy t-purple" id="btnSet" title="Settings" aria-label="Settings"><svg viewBox="0 0 32 32"><use href="#i-gear"/></svg></button>
+    </div>
+    <div id="boosters">
+      <button class="tool toy t-white" id="tBoom" title="Firework: blows up a random ring or bar" aria-label="Firework booster"><svg viewBox="0 0 64 64"><use href="#i-rocket"/></svg><span class="badge font" id="bBoom"></span></button>
+      <button class="tool toy t-white" id="tHammer" title="Hammer: smash the ring or bar you tap" aria-label="Hammer booster"><svg viewBox="0 0 64 64"><use href="#i-hammer"/></svg><span class="badge font" id="bHammer"></span></button>
+    </div>
+    <button class="ic toy t-white zoomBtn" id="zOut" title="Zoom out" aria-label="Zoom out" hidden><svg viewBox="0 0 32 32"><circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M9.5 14h9M21 21l7 7" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg></button>
+    <button class="ic toy t-white zoomBtn" id="zIn" title="Zoom in" aria-label="Zoom in" hidden><svg viewBox="0 0 32 32"><circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="3.5"/><path d="M9.5 14h9M14 9.5v9M21 21l7 7" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/></svg></button>
+    <div id="coachDim" hidden></div>
+    <button class="ic toy t-white" id="coachSkip" title="Skip" aria-label="Skip the lesson" hidden><svg viewBox="0 0 32 32"><path d="M9 9l14 14M23 9L9 23" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/></svg></button>
+    <div id="coachHand" hidden><svg viewBox="0 0 56 64"><use href="#i-hand"/></svg></div>
+    <div id="banner" hidden><span id="bannerTxt">Tap a ring or bar to smash it</span><button class="toy t-blue font st" id="bannerX">Cancel</button></div>
+  </section>
+  <div id="hardStamp" hidden><b class="font">HARD LEVEL</b></div>
+
+  <div id="tut" hidden>
+    <div id="hand"><svg viewBox="0 0 56 64"><use href="#i-hand"/></svg></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="veil" id="win" hidden>
+    <div class="lights" aria-hidden="true"><i class="halo"></i></div>
+    <div class="paper" aria-hidden="true"><i style="--x:1.2%;--c:#ff5a4e;--t:2.93s;--d:-1.91s;--r:18deg;--w:12px"></i><i style="--x:4.2%;--c:#ffd23f;--t:3.88s;--d:-3.53s;--r:54deg;--w:8px"></i><i style="--x:8.0%;--c:#4cbf35;--t:3.52s;--d:-0.85s;--r:141deg;--w:10px"></i><i style="--x:11.8%;--c:#3fb3ef;--t:3.84s;--d:-3.64s;--r:161deg;--w:12px"></i><i style="--x:17.6%;--c:#a98cff;--t:2.74s;--d:-1.60s;--r:12deg;--w:8px"></i><i style="--x:19.4%;--c:#ff8ad0;--t:4.49s;--d:-1.30s;--r:36deg;--w:12px"></i><i style="--x:23.5%;--c:#ffab3a;--t:3.28s;--d:-2.68s;--r:46deg;--w:8px"></i><i style="--x:29.2%;--c:#ffffff;--t:4.01s;--d:-1.49s;--r:140deg;--w:12px"></i><i style="--x:31.0%;--c:#ff5a4e;--t:2.73s;--d:-0.56s;--r:174deg;--w:12px"></i><i style="--x:36.3%;--c:#ffd23f;--t:3.29s;--d:-1.93s;--r:116deg;--w:10px"></i><i style="--x:39.6%;--c:#4cbf35;--t:4.35s;--d:-3.04s;--r:62deg;--w:8px"></i><i style="--x:44.5%;--c:#3fb3ef;--t:3.76s;--d:-3.29s;--r:114deg;--w:10px"></i><i style="--x:48.5%;--c:#a98cff;--t:2.76s;--d:-1.41s;--r:42deg;--w:10px"></i><i style="--x:50.6%;--c:#ff8ad0;--t:3.68s;--d:-0.14s;--r:171deg;--w:8px"></i><i style="--x:56.8%;--c:#ffab3a;--t:3.86s;--d:-3.38s;--r:80deg;--w:10px"></i><i style="--x:60.4%;--c:#ffffff;--t:3.91s;--d:-2.27s;--r:116deg;--w:8px"></i><i style="--x:64.8%;--c:#ff5a4e;--t:4.68s;--d:-2.22s;--r:170deg;--w:8px"></i><i style="--x:65.6%;--c:#ffd23f;--t:4.14s;--d:-2.68s;--r:174deg;--w:10px"></i><i style="--x:70.3%;--c:#4cbf35;--t:3.45s;--d:-2.31s;--r:5deg;--w:10px"></i><i style="--x:74.4%;--c:#3fb3ef;--t:3.94s;--d:-1.95s;--r:55deg;--w:10px"></i><i style="--x:77.4%;--c:#a98cff;--t:3.14s;--d:-1.23s;--r:127deg;--w:8px"></i><i style="--x:81.4%;--c:#ff8ad0;--t:3.48s;--d:-0.97s;--r:35deg;--w:10px"></i><i style="--x:87.9%;--c:#ffab3a;--t:3.21s;--d:-1.33s;--r:91deg;--w:12px"></i><i style="--x:91.9%;--c:#ffffff;--t:4.71s;--d:-0.71s;--r:45deg;--w:8px"></i><i style="--x:93.2%;--c:#ff5a4e;--t:3.11s;--d:-1.51s;--r:150deg;--w:8px"></i><i style="--x:97.2%;--c:#ffd23f;--t:2.61s;--d:-1.09s;--r:94deg;--w:12px"></i></div>
+    <div class="card done">
+      <div class="cheer"><div class="bee"><svg viewBox="0 0 220 200" aria-hidden="true"><defs><radialGradient id="beeY_cheer" cx="38%" cy="30%" r="78%"><stop offset="0" stop-color="#fff4ad"/><stop offset=".45" stop-color="#ffd84a"/><stop offset="1" stop-color="#f3a51b"/></radialGradient><clipPath id="beeBody_cheer"><ellipse cx="110" cy="142" rx="40" ry="35"/></clipPath></defs><g class="wingL"><ellipse cx="50" cy="116" rx="33" ry="20" transform="rotate(-24 50 116)" fill="#d6f0ff" fill-opacity=".92" stroke="#24305e" stroke-width="5"/><ellipse cx="44" cy="110" rx="15" ry="6" transform="rotate(-24 44 110)" fill="#fff" opacity=".85"/></g><g class="wingR"><ellipse cx="170" cy="116" rx="33" ry="20" transform="rotate(24 170 116)" fill="#d6f0ff" fill-opacity=".92" stroke="#24305e" stroke-width="5"/><ellipse cx="176" cy="110" rx="15" ry="6" transform="rotate(24 176 110)" fill="#fff" opacity=".85"/></g><path d="M100 171L110 192L120 171Z" fill="#3a2e4f" stroke="#24305e" stroke-width="4" stroke-linejoin="round"/><ellipse cx="110" cy="142" rx="40" ry="35" fill="url(#beeY_cheer)"/><g clip-path="url(#beeBody_cheer)" fill="#3a2e4f"><rect x="60" y="137" width="100" height="12"/><rect x="60" y="159" width="100" height="12"/></g><ellipse cx="110" cy="142" rx="40" ry="35" fill="none" stroke="#24305e" stroke-width="5"/><g class="armL"><path d="M80 132Q50 122 32 70" stroke="#24305e" stroke-width="15" fill="none" stroke-linecap="round"/><path d="M80 132Q50 122 32 70" stroke="#ffd84a" stroke-width="7" fill="none" stroke-linecap="round"/><g transform="translate(30 62)"><circle r="14" fill="#ff6fae" stroke="#24305e" stroke-width="4"/><path d="M0-8V8M-8 0H8M-6-6L6 6M6-6L-6 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".75"/></g></g><g class="armR"><path d="M140 132Q170 122 188 70" stroke="#24305e" stroke-width="15" fill="none" stroke-linecap="round"/><path d="M140 132Q170 122 188 70" stroke="#ffd84a" stroke-width="7" fill="none" stroke-linecap="round"/><g transform="translate(190 62)"><circle r="14" fill="#a98cff" stroke="#24305e" stroke-width="4"/><path d="M0-8V8M-8 0H8M-6-6L6 6M6-6L-6 6" stroke="#fff" stroke-width="2.4" stroke-linecap="round" opacity=".75"/></g></g><path d="M97 40Q89 22 80 15" stroke="#24305e" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="79" cy="13" r="8" fill="#3a2e4f" stroke="#24305e" stroke-width="3"/><path d="M123 40Q131 22 140 15" stroke="#24305e" stroke-width="5" fill="none" stroke-linecap="round"/><circle cx="141" cy="13" r="8" fill="#3a2e4f" stroke="#24305e" stroke-width="3"/><circle cx="110" cy="80" r="46" fill="url(#beeY_cheer)" stroke="#24305e" stroke-width="5"/><ellipse cx="91" cy="56" rx="17" ry="9" transform="rotate(-22 91 56)" fill="#fff" opacity=".55"/><ellipse cx="93" cy="80" rx="8.5" ry="11.5" fill="#24305e"/><ellipse cx="127" cy="80" rx="8.5" ry="11.5" fill="#24305e"/><circle cx="96.5" cy="74.5" r="3.6" fill="#fff"/><circle cx="130.5" cy="74.5" r="3.6" fill="#fff"/><circle cx="90.5" cy="85" r="1.7" fill="#fff"/><circle cx="124.5" cy="85" r="1.7" fill="#fff"/><ellipse cx="78" cy="96" rx="9.5" ry="5.8" fill="#ff7aa8" opacity=".75"/><ellipse cx="142" cy="96" rx="9.5" ry="5.8" fill="#ff7aa8" opacity=".75"/><path d="M98 97Q110 116 122 97Z" fill="#8a2b3a" stroke="#24305e" stroke-width="3.5" stroke-linejoin="round"/><path d="M103.5 104Q110 111 116.5 104Q110 100 103.5 104Z" fill="#ff7a8a"/></svg></div><i class="spk"></i><i class="spk"></i><i class="spk"></i></div>
+      <div class="face">
+        <div class="band"><span class="font" id="winTitle">LEVEL COMPLETE!</span></div>
+        <div class="winGold font"><span class="cn"><svg viewBox="0 0 32 32"><use href="#i-coin"/></svg><i></i><i></i><i></i><i></i><i></i><i></i></span><span id="winGoldN">+10</span></div>
+        <div id="winFeat" hidden><div class="barRow"><div class="track"><i id="winFeatFill"></i></div><span class="badge" id="winFeatBadge"><svg viewBox="0 0 64 64" id="winFeatIc"><use href="#i-rocket"/></svg></span></div><div class="lab" id="winFeatTxt"></div></div>
+        <button class="btn font" id="winNext">LEVEL 2</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="veil" id="buy" hidden>
+    <div class="card">
+      <h2 class="font st" id="buyTitle">Firework</h2>
+      <div class="buyIc toy t-white"><svg viewBox="0 0 64 64" id="buyIcon"><use href="#i-rocket"/></svg></div>
+      <div class="pill wallet toy t-orange font st" style="display:inline-flex" title="Your gold"><svg viewBox="0 0 32 32"><use href="#i-coin"/></svg><b id="buyHave">0</b></div>
+      <p id="buyNeed" hidden>Win levels to earn gold: +10 each.</p>
+      <button class="btn toy t-green font st" id="buyGold">Buy 1<svg class="coin" viewBox="0 0 32 32"><use href="#i-coin"/></svg><span id="buyPrice">50</span></button>
+      <button class="btn toy t-blue font st" id="buyAd" hidden>Free with a video</button>
+      <button class="btn ghost toy t-white font" id="buyNo">Not now</button>
+    </div>
+  </div>
+
+  <div class="veil" id="intro" hidden>
+    <div class="card">
+      <h2 class="font st" id="introTitle"></h2>
+      <div class="introArt" id="introArt"></div>
+      <p id="introTxt"></p>
+      <button class="btn toy t-blue font st" id="introOk">Got it</button>
+    </div>
+  </div>
+
+  <div class="veil" id="settings" hidden>
+    <div class="sheet">
+      <h2 class="font st">Settings</h2>
+      <div class="opt">Sound <button class="sw" id="swSound" aria-label="Sound"></button></div>
+      <div class="opt">Vibration <button class="sw" id="swVib" aria-label="Vibration"></button></div>
+      <div class="row">
+        <button class="btn ghost toy t-white font" id="setHome">Home</button>
+        <button class="btn toy t-blue font st" id="setResume">Resume</button>
+      </div>
+      <button class="btn ghost toy t-white font restartAll" id="setReset">
+        <svg viewBox="0 0 32 32"><use href="#i-restart"/></svg>Reset progress</button>
+      <div style="text-align:center"><button class="linkBtn" id="setPrivacy">Privacy</button></div>
+      <div class="dev">Jump to level <input id="devLevel" type="number" min="1" inputmode="numeric"><button class="toy t-white" id="devGo">Go</button></div>
+    </div>
+  </div>
+
+  <div class="veil" id="confirm" hidden>
+    <div class="card">
+      <h2 class="font st">Reset progress?</h2>
+      <p>You go back to level 1. Your level, gold, boosters and the tips you have seen are wiped. Sound and vibration stay as they are.</p>
+      <div class="row"><button class="btn ghost toy t-white font" id="confNo">Cancel</button><button class="btn toy t-orange font st" id="confYes">Reset</button></div>
+    </div>
+  </div>
+
+  <div class="veil" id="privacy" hidden>
+    <div class="sheet"><div id="privacyBody"><!--__PRIVACY__--></div>
+      <button class="btn toy t-blue font st" id="privacyOk">Close</button></div>
+  </div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- HUD icons paint in currentColor: white on a toy button, ink on a white one -->
+    <symbol id="i-gear" viewBox="0 0 32 32"><path fill="currentColor" fill-rule="evenodd" d="M13.6 2h4.8l.8 3.6 2.5 1.1 3.1-2 3.4 3.4-2 3.1 1.1 2.5 3.6.8v4.8l-3.6.8-1.1 2.5 2 3.1-3.4 3.4-3.1-2-2.5 1.1-.8 3.6h-4.8l-.8-3.6-2.5-1.1-3.1 2-3.4-3.4 2-3.1-1.1-2.5L2 18.4v-4.8l3.6-.8 1.1-2.5-2-3.1 3.4-3.4 3.1 2 2.5-1.1zM16 11a5 5 0 1 0 0 10a5 5 0 1 0 0-10z"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" d="M25 17a9 9 0 1 1-3.2-7"/><path fill="currentColor" d="M19 4l8 2-3 8z"/></symbol>
+    <symbol id="i-star" viewBox="0 0 32 32"><path fill="#ffd84a" stroke="#c98a12" stroke-width="2" stroke-linejoin="round" d="M16 2.5l4.1 8.4 9.2 1.3-6.7 6.5 1.6 9.2L16 23.6l-8.2 4.3 1.6-9.2-6.7-6.5 9.2-1.3z"/><path fill="#fff" opacity=".55" d="M16 6.5l2.6 5.4-2.6.4-5.5.8z"/></symbol>
+    <symbol id="i-rocket" viewBox="0 0 64 64">
+      <g transform="rotate(-35 32 32)"><path fill="#9b59e8" d="M22 18c0-8 10-14 10-14s10 6 10 14v26H22z"/><path fill="#fff" d="M22 24h20v5H22zm0 10h20v5H22z" opacity=".9"/>
+      <path fill="#c3a0ff" d="M32 4s-6 4-8 10h16c-2-6-8-10-8-10z"/><rect x="19" y="42" width="26" height="7" rx="3.5" fill="#ffc83d"/>
+      <path fill="none" stroke="#c99a5a" stroke-width="3" stroke-linecap="round" d="M32 49c0 6-5 6-5 11"/></g></symbol>
+    <symbol id="i-hammer" viewBox="0 0 64 64">
+      <g transform="rotate(-30 32 32)"><rect x="28" y="24" width="9" height="34" rx="4" fill="#f08a2e"/><rect x="28" y="24" width="4" height="34" rx="2" fill="#ffb55e"/>
+      <rect x="10" y="8" width="44" height="22" rx="9" fill="#8e5ad9"/><rect x="10" y="8" width="44" height="9" rx="4.5" fill="#b38bff"/>
+      <rect x="6" y="10" width="8" height="18" rx="3" fill="#ffc83d"/><rect x="50" y="10" width="8" height="18" rx="3" fill="#ffc83d"/>
+      <path fill="#fff" d="M32 12l2 4.5 4.8.4-3.7 3.1 1.2 4.7-4.3-2.6-4.3 2.6 1.2-4.7-3.7-3.1 4.8-.4z"/></g></symbol>
+    <symbol id="i-coin" viewBox="0 0 32 32"><circle cx="16" cy="17.2" r="13.5" fill="#d9860a"/><circle cx="16" cy="15.6" r="13.5" fill="#ffd23f" stroke="#c97c08" stroke-width="1.5"/><circle cx="16" cy="15.6" r="9.2" fill="none" stroke="#f2a516" stroke-width="2.2"/><path d="M16 9.8l1.8 3.7 4 .6-2.9 2.8.7 4L16 19l-3.6 1.9.7-4-2.9-2.8 4-.6z" fill="#f2a516"/><path d="M8 11a9 9 0 0 1 6-5" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" opacity=".7"/></symbol>
+    <!-- what the feature meter can promise: a bar in its clip, a bomb, a chained lock -->
+    <symbol id="i-bar" viewBox="0 0 64 64"><path d="M10 44H48V14" fill="none" stroke="#2f9a22" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10 42H46V14" fill="none" stroke="#6ac53e" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="20" y="33" width="14" height="22" rx="4" fill="#d3d8de" stroke="#7f858e" stroke-width="2.5"/><circle cx="27" cy="39" r="1.8" fill="#7f858e"/><circle cx="27" cy="49" r="1.8" fill="#7f858e"/></symbol>
+    <symbol id="i-bomb" viewBox="0 0 64 64"><circle cx="30" cy="38" r="20" fill="#a8431f" stroke="#6b2a12" stroke-width="3"/>
+      <path d="M30 26l3.6 7.4 8.1 1.2-5.9 5.7 1.4 8.1-7.2-3.8-7.2 3.8 1.4-8.1-5.9-5.7 8.1-1.2z" fill="#ffd23f"/>
+      <rect x="25" y="14" width="10" height="7" rx="2" fill="#6b3a1c"/><path d="M30 14q3-9 12-8" fill="none" stroke="#b0823a" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="44" cy="6" r="4.5" fill="#ffdc5a"/><circle cx="44" cy="6" r="2" fill="#ff7a28"/><ellipse cx="22" cy="30" rx="5" ry="3" fill="#fff" opacity=".35" transform="rotate(-35 22 30)"/></symbol>
+    <symbol id="i-chain" viewBox="0 0 64 64"><path d="M21 30v-8a11 11 0 0 1 22 0v8" fill="none" stroke="#8d939b" stroke-width="6"/>
+      <rect x="13" y="28" width="38" height="28" rx="7" fill="#c9ced5" stroke="#7f858e" stroke-width="3"/>
+      <circle cx="32" cy="39" r="4" fill="#3d3a44"/><rect x="30.5" y="40" width="3" height="9" rx="1.5" fill="#3d3a44"/>
+      <path d="M6 12l8 6M58 12l-8 6" stroke="#a3a9b1" stroke-width="4" stroke-linecap="round" stroke-dasharray="4 3"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 56 64"><path fill="#fff" stroke="#3d3a44" stroke-width="2.5" stroke-linejoin="round"
+      d="M17 4c3 0 5 2 5 5v18c1-2 3-3 5-3 3 0 4 2 5 3 1-1 3-2 5-1 2 1 3 3 3 4 1-1 3-1 4 0 2 1 3 3 3 6v12c0 9-7 15-16 15h-4c-6 0-10-3-13-8L5 39c-1-3 0-5 2-6 2-1 5 0 6 2l2 3V9c0-3 0-5 2-5z"/>
+      <rect x="18" y="52" width="26" height="9" rx="4" fill="#ffc83d" stroke="#3d3a44" stroke-width="2.5"/></symbol>
+  </defs>
+</svg>
+<!--__SCRIPT__-->
+</body>
+</html>
